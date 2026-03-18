@@ -7,7 +7,7 @@ Created by **Infinite** — [GitHub](https://github.com/Infinite-Unknown)
 ---
 ## What can it do?
 Showcase:
-[Streamable](https://streamable.com/zv2u2e)
+[![ALT_TEXT](https://img.youtube.com/vi/VIDEO_ID/0.jpg)](https://youtu.be/YEQ_8O-11bo)
 
 
 ## Features
