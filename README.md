@@ -47,8 +47,8 @@ pythonw net_blocker.pyw
 A build script is included that uses a conda environment for a clean build:
 
 ```bash
-# From the NetBlocker folder, run:
-build.bat
+# From the NetBlocker folder, (after conda activated) run:
+.\build.bat
 ```
 
 This will:
