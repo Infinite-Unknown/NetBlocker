@@ -5,6 +5,10 @@ A Windows utility that selectively blocks internet access for chosen application
 Created by **Infinite** — [GitHub](https://github.com/Infinite-Unknown)
 
 ---
+## What can it do?
+
+[![Showcase](({https://streamable.com/zv2u2e} "Showcase #1")
+
 
 ## Features
 
