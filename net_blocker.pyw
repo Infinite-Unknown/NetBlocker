@@ -26,6 +26,14 @@ __version__ = "1.0.0"
 __author__ = "Infinite"
 __github__ = "https://github.com/Infinite-Unknown"
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
 
 # --- Config ---
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "net_blocker_configs")
@@ -568,6 +576,11 @@ class NetBlockerApp:
         self.root.title("Net Blocker")
         self.root.geometry("650x550")
         self.root.minsize(500, 400)
+        
+        icon_path = resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
+            
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
         self.processes: list[dict] = []

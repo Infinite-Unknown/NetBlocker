@@ -31,12 +31,14 @@ pyinstaller ^
     --onefile ^
     --windowed ^
     --name "NetBlocker" ^
+    --icon=icon.ico ^
     --uac-admin ^
     --collect-all customtkinter ^
     --hidden-import pynput.keyboard._win32 ^
     --hidden-import pynput.mouse._win32 ^
     --hidden-import pynput._util ^
     --hidden-import pynput._util.win32 ^
+    --add-data "icon.ico;." ^
     net_blocker.pyw
 
 if errorlevel 1 (

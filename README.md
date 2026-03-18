@@ -97,6 +97,8 @@ When enabled, the blocker automatically unblocks for ~50 ms then re-blocks at yo
 - **Spacebar spammer**: Uses a Windows low-level keyboard hook (`WH_KEYBOARD_LL`) to intercept physical spacebar events, then sends synthetic key events via `SendInput` with scan codes (`KEYEVENTF_SCANCODE`) for DirectInput compatibility.
 - **Orphan cleanup**: On startup, any leftover `NetBlocker_*` firewall rules from a previous crash are automatically removed.
 
-## License
+## Disclaimer
 
-MIT License. See [LICENSE](LICENSE) for details.
+This tool is for educational purposes only. Unauthorized use against systems you do not own or have permission to test is illegal.
+
+I will not take any responsibility for any form of abuse or account bans.
