@@ -2,7 +2,6 @@
 #  Net Blocker — Selective app internet blocker with lagswitch & spacebar spam
 #  Copyright (c) 2026 Infinite
 #  GitHub: https://github.com/Infinite-Unknown
-#  License: MIT
 # ============================================================================
 
 import ctypes
@@ -16,24 +15,17 @@ import atexit
 import signal
 import json
 import time
+import random
 import webbrowser
 
 import psutil
 import customtkinter as ctk
 from pynput import mouse, keyboard as kb
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Infinite"
 __github__ = "https://github.com/Infinite-Unknown"
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(os.path.dirname(__file__))
-    return os.path.join(base_path, relative_path)
 
 # --- Config ---
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "net_blocker_configs")
@@ -287,50 +279,127 @@ def delete_config(name: str):
 
 # --- Overlay Window ---
 class OverlayWindow:
-    def __init__(self, root):
+    DEFAULT_SETTINGS = {
+        "label_size": 18,
+        "timer_size": 14,
+        "on_color": "#F44336",
+        "off_color": "#4CAF50",
+        "timer_active_color": "#F44336",
+        "timer_idle_color": "#888888",
+        "bg_color": "#1a1a1a",
+        "opacity": 85,
+        "width": 200,
+        "height": 70,
+        "pos_x": 20,
+        "pos_y": 20,
+    }
+
+    def __init__(self, root, on_pos_changed=None):
         self._root = root
         self._win = None
         self._label = None
         self._timer_label = None
+        self._content_frame = None
         self._visible = False
         self._blocking = False
         self._block_start = 0.0
         self._timer_after_id = None
+        self._settings = dict(self.DEFAULT_SETTINGS)
+        self._on_pos_changed = on_pos_changed
+
+    @property
+    def settings(self):
+        # Capture current position if visible
+        if self._win is not None:
+            try:
+                self._settings["pos_x"] = self._win.winfo_x()
+                self._settings["pos_y"] = self._win.winfo_y()
+            except Exception:
+                pass
+        return dict(self._settings)
+
+    def update_settings(self, **kwargs):
+        # Capture current position so non-position changes don't reset it
+        self._capture_pos()
+        self._settings.update(kwargs)
+        self._apply_live()
+
+    def apply_all_settings(self, settings: dict):
+        self._capture_pos()
+        self._settings.update(settings)
+        self._apply_live()
+
+    def _capture_pos(self):
+        """Read current window position into settings."""
+        if self._win is not None:
+            try:
+                self._settings["pos_x"] = self._win.winfo_x()
+                self._settings["pos_y"] = self._win.winfo_y()
+            except Exception:
+                pass
+
+    def _apply_live(self):
+        """Apply settings to an already-visible overlay."""
+        if self._win is None:
+            return
+        s = self._settings
+        self._win.configure(fg_color=s["bg_color"])
+        self._win.attributes("-alpha", s["opacity"] / 100.0)
+        w, h = s["width"], s["height"]
+        x, y = s["pos_x"], s["pos_y"]
+        self._win.geometry(f"{w}x{h}+{x}+{y}")
+        if self._label:
+            color = s["on_color"] if self._blocking else s["off_color"]
+            self._label.configure(
+                font=ctk.CTkFont(size=s["label_size"], weight="bold"),
+                text_color=color,
+            )
+        if self._timer_label:
+            tcolor = s["timer_active_color"] if self._blocking else s["timer_idle_color"]
+            self._timer_label.configure(
+                font=ctk.CTkFont(size=s["timer_size"]),
+                text_color=tcolor,
+            )
 
     def show(self):
         if self._win is not None:
             return
+        s = self._settings
         self._win = ctk.CTkToplevel(self._root)
         self._win.title("")
-        self._win.geometry("200x70+20+20")
+        self._win.geometry(f"{s['width']}x{s['height']}+{s['pos_x']}+{s['pos_y']}")
         self._win.resizable(False, False)
         self._win.overrideredirect(True)
         self._win.attributes("-topmost", True)
-        self._win.attributes("-alpha", 0.85)
-        self._win.configure(fg_color="#1a1a1a")
+        self._win.attributes("-alpha", s["opacity"] / 100.0)
+        self._win.configure(fg_color=s["bg_color"])
+
+        # Content frame centered in window
+        self._content_frame = ctk.CTkFrame(self._win, fg_color="transparent")
+        self._content_frame.place(relx=0.5, rely=0.5, anchor="center")
 
         self._label = ctk.CTkLabel(
-            self._win, text="Lagswitch: Off",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="#4CAF50",
+            self._content_frame, text="Lagswitch: Off",
+            font=ctk.CTkFont(size=s["label_size"], weight="bold"),
+            text_color=s["off_color"],
         )
-        self._label.pack(padx=8, pady=(6, 0))
+        self._label.pack()
 
         self._timer_label = ctk.CTkLabel(
-            self._win, text="0 ms",
-            font=ctk.CTkFont(size=14),
-            text_color="#888888",
+            self._content_frame, text="0 ms",
+            font=ctk.CTkFont(size=s["timer_size"]),
+            text_color=s["timer_idle_color"],
         )
-        self._timer_label.pack(padx=8, pady=(0, 6))
+        self._timer_label.pack()
 
-        # Allow dragging
-        for w in (self._win, self._label, self._timer_label):
+        for w in (self._win, self._content_frame, self._label, self._timer_label):
             w.bind("<Button-1>", self._start_drag)
             w.bind("<B1-Motion>", self._on_drag)
 
         self._visible = True
 
     def hide(self):
+        self._capture_pos()
         if self._timer_after_id is not None:
             self._root.after_cancel(self._timer_after_id)
             self._timer_after_id = None
@@ -339,6 +408,7 @@ class OverlayWindow:
             self._win = None
             self._label = None
             self._timer_label = None
+            self._content_frame = None
             self._visible = False
 
     def toggle(self):
@@ -353,11 +423,12 @@ class OverlayWindow:
 
     def set_blocking(self, blocking: bool):
         self._blocking = blocking
+        s = self._settings
         if self._label is None:
             return
         if blocking:
             self._block_start = time.perf_counter()
-            self._label.configure(text="Lagswitch: On", text_color="#F44336")
+            self._label.configure(text="Lagswitch: On", text_color=s["on_color"])
             if self._timer_after_id is None:
                 self._tick_timer()
         else:
@@ -365,15 +436,15 @@ class OverlayWindow:
                 self._root.after_cancel(self._timer_after_id)
                 self._timer_after_id = None
             elapsed_ms = int((time.perf_counter() - self._block_start) * 1000)
-            self._label.configure(text="Lagswitch: Off", text_color="#4CAF50")
+            self._label.configure(text="Lagswitch: Off", text_color=s["off_color"])
             if self._timer_label:
-                self._timer_label.configure(text=f"{elapsed_ms} ms", text_color="#888888")
+                self._timer_label.configure(text=f"{elapsed_ms} ms", text_color=s["timer_idle_color"])
 
     def _tick_timer(self):
         if not self._blocking or self._timer_label is None:
             return
         elapsed_ms = int((time.perf_counter() - self._block_start) * 1000)
-        self._timer_label.configure(text=f"{elapsed_ms} ms", text_color="#F44336")
+        self._timer_label.configure(text=f"{elapsed_ms} ms", text_color=self._settings["timer_active_color"])
         self._timer_after_id = self._root.after(16, self._tick_timer)
 
     def _start_drag(self, event):
@@ -386,6 +457,10 @@ class OverlayWindow:
         x = self._win.winfo_x() + event.x - self._drag_x
         y = self._win.winfo_y() + event.y - self._drag_y
         self._win.geometry(f"+{x}+{y}")
+        self._settings["pos_x"] = x
+        self._settings["pos_y"] = y
+        if self._on_pos_changed:
+            self._on_pos_changed(x, y)
 
 
 # --- Spacebar Spammer (ctypes SendInput + low-level hook) ---
@@ -472,6 +547,14 @@ class SpacebarSpammer:
         self._enabled = False
         self._on_start = on_start
         self._on_stop = on_stop
+        # Randomize mode
+        self.randomize = False
+        self.press_min_ms = 10
+        self.press_max_ms = 80
+        self.release_min_ms = 10
+        self.release_max_ms = 80
+        self.hold_min_ms = 0
+        self.hold_max_ms = 500
         # Store callback ref to prevent GC
         self._hook_proc_ref = _HOOKPROC(self._ll_keyboard_proc)
 
@@ -534,8 +617,13 @@ class SpacebarSpammer:
             self.stop()
 
     def _spam_loop(self):
-        if self._hold_delay_ms > 0:
-            deadline = time.perf_counter() + self._hold_delay_ms / 1000.0
+        # Activation delay
+        if self.randomize:
+            hold_ms = random.randint(self.hold_min_ms, max(self.hold_min_ms, self.hold_max_ms))
+        else:
+            hold_ms = self._hold_delay_ms
+        if hold_ms > 0:
+            deadline = time.perf_counter() + hold_ms / 1000.0
             while self._running and time.perf_counter() < deadline:
                 time.sleep(0.005)
             if not self._running:
@@ -545,9 +633,17 @@ class SpacebarSpammer:
             self._on_start()
         while self._running:
             self._send_key(up=False)   # press
-            time.sleep(self.press_delay_ms / 1000.0)
+            if self.randomize:
+                p = random.randint(self.press_min_ms, max(self.press_min_ms, self.press_max_ms))
+            else:
+                p = self.press_delay_ms
+            time.sleep(p / 1000.0)
             self._send_key(up=True)    # release
-            time.sleep(self.release_delay_ms / 1000.0)
+            if self.randomize:
+                r = random.randint(self.release_min_ms, max(self.release_min_ms, self.release_max_ms))
+            else:
+                r = self.release_delay_ms
+            time.sleep(r / 1000.0)
         self._activated = False
         if self._on_stop:
             self._on_stop()
@@ -576,18 +672,13 @@ class NetBlockerApp:
         self.root.title("Net Blocker")
         self.root.geometry("650x550")
         self.root.minsize(500, 400)
-        
-        icon_path = resource_path("icon.ico")
-        if os.path.exists(icon_path):
-            self.root.iconbitmap(icon_path)
-            
         self.root.protocol("WM_DELETE_WINDOW", self._on_quit)
 
         self.processes: list[dict] = []
         self.checkboxes: list[tuple[ctk.CTkCheckBox, ctk.BooleanVar, dict]] = []
         self._all_processes: list[dict] = []
 
-        self.overlay = OverlayWindow(self.root)
+        self.overlay = OverlayWindow(self.root, on_pos_changed=self._on_overlay_pos_changed)
         self.spammer = SpacebarSpammer(
             on_start=self._on_spammer_started,
             on_stop=self._on_spammer_stopped,
@@ -623,10 +714,12 @@ class NetBlockerApp:
 
         self.tab_main = self.tabview.add("Blocker")
         self.tab_configs = self.tabview.add("Configs")
+        self.tab_overlay = self.tabview.add("Overlay")
         self.tab_misc = self.tabview.add("Misc")
 
         self._build_main_tab()
         self._build_configs_tab()
+        self._build_overlay_tab()
         self._build_misc_tab()
 
         # Footer with copyright
@@ -779,15 +872,228 @@ class NetBlockerApp:
             ctk.CTkButton(row, text="Delete", width=60, fg_color="#8B0000", hover_color="#6B0000",
                            command=lambda n=cfg_name: self._delete_config(n)).pack(side="right", padx=4, pady=4)
 
+    # --- Overlay Tab ---
+    def _build_overlay_tab(self):
+        scroll = ctk.CTkScrollableFrame(self.tab_overlay)
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(scroll, text="Overlay Customization",
+                      font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(6, 8))
+
+        defaults = OverlayWindow.DEFAULT_SETTINGS
+
+        # --- Font Sizes ---
+        font_frame = ctk.CTkFrame(scroll)
+        font_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        ctk.CTkLabel(font_frame, text="Label Font Size:",
+                      font=ctk.CTkFont(size=13), width=120,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_label_size = ctk.IntVar(value=defaults["label_size"])
+        ctk.CTkSlider(font_frame, from_=10, to=40, variable=self._ov_label_size,
+                       width=180, command=lambda v: self._on_overlay_setting("label_size", v)
+                       ).pack(side="left", padx=4, pady=6)
+        self._ov_label_size_lbl = ctk.CTkLabel(font_frame, text=str(defaults["label_size"]),
+                                                 font=ctk.CTkFont(size=13), width=40)
+        self._ov_label_size_lbl.pack(side="left", padx=4, pady=6)
+
+        timer_font_frame = ctk.CTkFrame(scroll)
+        timer_font_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        ctk.CTkLabel(timer_font_frame, text="Timer Font Size:",
+                      font=ctk.CTkFont(size=13), width=120,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_timer_size = ctk.IntVar(value=defaults["timer_size"])
+        ctk.CTkSlider(timer_font_frame, from_=8, to=32, variable=self._ov_timer_size,
+                       width=180, command=lambda v: self._on_overlay_setting("timer_size", v)
+                       ).pack(side="left", padx=4, pady=6)
+        self._ov_timer_size_lbl = ctk.CTkLabel(timer_font_frame, text=str(defaults["timer_size"]),
+                                                 font=ctk.CTkFont(size=13), width=40)
+        self._ov_timer_size_lbl.pack(side="left", padx=4, pady=6)
+
+        # --- Colors ---
+        ctk.CTkLabel(scroll, text="Colors",
+                      font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
+
+        color_defs = [
+            ("On Color:", "on_color", defaults["on_color"]),
+            ("Off Color:", "off_color", defaults["off_color"]),
+            ("Timer Active:", "timer_active_color", defaults["timer_active_color"]),
+            ("Timer Idle:", "timer_idle_color", defaults["timer_idle_color"]),
+            ("Background:", "bg_color", defaults["bg_color"]),
+        ]
+        self._ov_color_entries = {}
+        for label_text, key, default_val in color_defs:
+            row = ctk.CTkFrame(scroll)
+            row.pack(fill="x", padx=10, pady=2)
+            ctk.CTkLabel(row, text=label_text, font=ctk.CTkFont(size=13),
+                          width=110, anchor="w").pack(side="left", padx=(10, 4), pady=4)
+            entry = ctk.CTkEntry(row, width=100, placeholder_text=default_val)
+            entry.insert(0, default_val)
+            entry.pack(side="left", padx=4, pady=4)
+            self._ov_color_entries[key] = entry
+            preview = ctk.CTkLabel(row, text="  ", width=24, height=24,
+                                    fg_color=default_val, corner_radius=4)
+            preview.pack(side="left", padx=4, pady=4)
+            # Bind to update preview and overlay on Enter or focus out
+            entry.bind("<Return>", lambda e, k=key, p=preview: self._on_color_entry(k, p))
+            entry.bind("<FocusOut>", lambda e, k=key, p=preview: self._on_color_entry(k, p))
+
+        # --- Opacity ---
+        ctk.CTkLabel(scroll, text="Appearance",
+                      font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
+
+        opacity_frame = ctk.CTkFrame(scroll)
+        opacity_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        ctk.CTkLabel(opacity_frame, text="Opacity:",
+                      font=ctk.CTkFont(size=13), width=120,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_opacity = ctk.IntVar(value=defaults["opacity"])
+        ctk.CTkSlider(opacity_frame, from_=20, to=100, variable=self._ov_opacity,
+                       width=180, command=lambda v: self._on_overlay_setting("opacity", v)
+                       ).pack(side="left", padx=4, pady=6)
+        self._ov_opacity_lbl = ctk.CTkLabel(opacity_frame, text=f"{defaults['opacity']}%",
+                                              font=ctk.CTkFont(size=13), width=50)
+        self._ov_opacity_lbl.pack(side="left", padx=4, pady=6)
+
+        # --- Size ---
+        size_frame = ctk.CTkFrame(scroll)
+        size_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        ctk.CTkLabel(size_frame, text="Width:",
+                      font=ctk.CTkFont(size=13), width=60,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_width = ctk.IntVar(value=defaults["width"])
+        ctk.CTkSlider(size_frame, from_=120, to=500, variable=self._ov_width,
+                       width=130, command=lambda v: self._on_overlay_setting("width", v)
+                       ).pack(side="left", padx=4, pady=6)
+        self._ov_width_lbl = ctk.CTkLabel(size_frame, text=str(defaults["width"]),
+                                            font=ctk.CTkFont(size=13), width=40)
+        self._ov_width_lbl.pack(side="left", padx=4, pady=6)
+
+        ctk.CTkLabel(size_frame, text="Height:",
+                      font=ctk.CTkFont(size=13), width=60,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_height = ctk.IntVar(value=defaults["height"])
+        ctk.CTkSlider(size_frame, from_=40, to=300, variable=self._ov_height,
+                       width=130, command=lambda v: self._on_overlay_setting("height", v)
+                       ).pack(side="left", padx=4, pady=6)
+        self._ov_height_lbl = ctk.CTkLabel(size_frame, text=str(defaults["height"]),
+                                             font=ctk.CTkFont(size=13), width=40)
+        self._ov_height_lbl.pack(side="left", padx=4, pady=6)
+
+        # --- Position ---
+        pos_frame = ctk.CTkFrame(scroll)
+        pos_frame.pack(fill="x", padx=10, pady=(0, 4))
+
+        ctk.CTkLabel(pos_frame, text="X:",
+                      font=ctk.CTkFont(size=13), width=30,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_pos_x = ctk.IntVar(value=defaults["pos_x"])
+        self._ov_pos_x_slider = ctk.CTkSlider(
+            pos_frame, from_=0, to=3840, variable=self._ov_pos_x,
+            width=150, command=lambda v: self._on_overlay_setting("pos_x", v))
+        self._ov_pos_x_slider.pack(side="left", padx=4, pady=6)
+        self._ov_pos_x_lbl = ctk.CTkLabel(pos_frame, text=str(defaults["pos_x"]),
+                                            font=ctk.CTkFont(size=13), width=50)
+        self._ov_pos_x_lbl.pack(side="left", padx=4, pady=6)
+
+        ctk.CTkLabel(pos_frame, text="Y:",
+                      font=ctk.CTkFont(size=13), width=30,
+                      anchor="w").pack(side="left", padx=(10, 4), pady=6)
+        self._ov_pos_y = ctk.IntVar(value=defaults["pos_y"])
+        self._ov_pos_y_slider = ctk.CTkSlider(
+            pos_frame, from_=0, to=2160, variable=self._ov_pos_y,
+            width=150, command=lambda v: self._on_overlay_setting("pos_y", v))
+        self._ov_pos_y_slider.pack(side="left", padx=4, pady=6)
+        self._ov_pos_y_lbl = ctk.CTkLabel(pos_frame, text=str(defaults["pos_y"]),
+                                            font=ctk.CTkFont(size=13), width=50)
+        self._ov_pos_y_lbl.pack(side="left", padx=4, pady=6)
+
+        # --- Reset button ---
+        ctk.CTkButton(scroll, text="Reset to Defaults", width=140,
+                       fg_color="#555555", hover_color="#444444",
+                       command=self._reset_overlay_settings).pack(anchor="w", padx=10, pady=(10, 6))
+
+    def _on_overlay_setting(self, key, value):
+        v = int(value)
+        self.overlay.update_settings(**{key: v})
+        # Update labels
+        if key == "label_size":
+            self._ov_label_size_lbl.configure(text=str(v))
+        elif key == "timer_size":
+            self._ov_timer_size_lbl.configure(text=str(v))
+        elif key == "opacity":
+            self._ov_opacity_lbl.configure(text=f"{v}%")
+        elif key == "width":
+            self._ov_width_lbl.configure(text=str(v))
+        elif key == "height":
+            self._ov_height_lbl.configure(text=str(v))
+        elif key == "pos_x":
+            self._ov_pos_x_lbl.configure(text=str(v))
+        elif key == "pos_y":
+            self._ov_pos_y_lbl.configure(text=str(v))
+
+    def _on_overlay_pos_changed(self, x, y):
+        """Called when overlay is dragged — sync sliders."""
+        self._ov_pos_x.set(x)
+        self._ov_pos_x_lbl.configure(text=str(x))
+        self._ov_pos_y.set(y)
+        self._ov_pos_y_lbl.configure(text=str(y))
+
+    def _on_color_entry(self, key, preview_label):
+        entry = self._ov_color_entries[key]
+        color = entry.get().strip()
+        if not color.startswith("#") or len(color) not in (4, 7):
+            return
+        try:
+            preview_label.configure(fg_color=color)
+            self.overlay.update_settings(**{key: color})
+        except Exception:
+            pass
+
+    def _reset_overlay_settings(self):
+        defaults = OverlayWindow.DEFAULT_SETTINGS
+        self.overlay.apply_all_settings(defaults)
+        # Update all UI controls
+        self._ov_label_size.set(defaults["label_size"])
+        self._ov_label_size_lbl.configure(text=str(defaults["label_size"]))
+        self._ov_timer_size.set(defaults["timer_size"])
+        self._ov_timer_size_lbl.configure(text=str(defaults["timer_size"]))
+        self._ov_opacity.set(defaults["opacity"])
+        self._ov_opacity_lbl.configure(text=f"{defaults['opacity']}%")
+        self._ov_width.set(defaults["width"])
+        self._ov_width_lbl.configure(text=str(defaults["width"]))
+        self._ov_height.set(defaults["height"])
+        self._ov_height_lbl.configure(text=str(defaults["height"]))
+        self._ov_pos_x.set(defaults["pos_x"])
+        self._ov_pos_x_lbl.configure(text=str(defaults["pos_x"]))
+        self._ov_pos_y.set(defaults["pos_y"])
+        self._ov_pos_y_lbl.configure(text=str(defaults["pos_y"]))
+        for key, entry in self._ov_color_entries.items():
+            entry.delete(0, "end")
+            entry.insert(0, defaults[key])
+            # Update preview
+            row = entry.master
+            for child in row.winfo_children():
+                if isinstance(child, ctk.CTkLabel) and child.cget("width") == 24:
+                    try:
+                        child.configure(fg_color=defaults[key])
+                    except Exception:
+                        pass
+
     # --- Misc Tab ---
     def _build_misc_tab(self):
-        # Spacebar Spammer section
-        header = ctk.CTkLabel(self.tab_misc, text="Spacebar Spammer",
-                               font=ctk.CTkFont(size=16, weight="bold"))
-        header.pack(anchor="w", padx=10, pady=(6, 8))
+        scroll = ctk.CTkScrollableFrame(self.tab_misc)
+        scroll.pack(fill="both", expand=True)
 
-        # Enable toggle
-        toggle_frame = ctk.CTkFrame(self.tab_misc)
+        # Spacebar Spammer section
+        ctk.CTkLabel(scroll, text="Spacebar Spammer",
+                      font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(6, 8))
+
+        # Enable toggle + status
+        toggle_frame = ctk.CTkFrame(scroll)
         toggle_frame.pack(fill="x", padx=10, pady=(0, 6))
 
         self._spammer_enabled = ctk.BooleanVar(value=False)
@@ -805,14 +1111,32 @@ class NetBlockerApp:
         )
         self._spammer_status.pack(side="right", padx=10, pady=8)
 
+        # Mode selector: Accurate / Random
+        mode_frame = ctk.CTkFrame(scroll)
+        mode_frame.pack(fill="x", padx=10, pady=(0, 6))
+
+        ctk.CTkLabel(mode_frame, text="Mode:",
+                      font=ctk.CTkFont(size=13)).pack(side="left", padx=(10, 4), pady=6)
+
+        self._spammer_mode = ctk.StringVar(value="Accurate")
+        self._spammer_mode_selector = ctk.CTkSegmentedButton(
+            mode_frame, values=["Accurate", "Random"],
+            variable=self._spammer_mode, width=180,
+            font=ctk.CTkFont(size=13),
+            command=self._on_spammer_mode_change,
+        )
+        self._spammer_mode_selector.pack(side="left", padx=4, pady=6)
+
+        # --- Accurate mode frame ---
+        self._accurate_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._accurate_frame.pack(fill="x", padx=0, pady=0)
+
         # Press delay
-        press_frame = ctk.CTkFrame(self.tab_misc)
+        press_frame = ctk.CTkFrame(self._accurate_frame)
         press_frame.pack(fill="x", padx=10, pady=(0, 4))
-
         ctk.CTkLabel(press_frame, text="Press Delay:",
-                      font=ctk.CTkFont(size=13), width=100,
+                      font=ctk.CTkFont(size=13), width=120,
                       anchor="w").pack(side="left", padx=(10, 4), pady=6)
-
         self._press_delay_var = ctk.IntVar(value=50)
         self._press_slider = ctk.CTkSlider(
             press_frame, from_=0, to=100,
@@ -820,21 +1144,16 @@ class NetBlockerApp:
             command=lambda v: self._on_spammer_slider("press", v),
         )
         self._press_slider.pack(side="left", padx=4, pady=6)
-
         self._press_delay_label = ctk.CTkLabel(
-            press_frame, text="50 ms",
-            font=ctk.CTkFont(size=13), width=60,
-        )
+            press_frame, text="50 ms", font=ctk.CTkFont(size=13), width=60)
         self._press_delay_label.pack(side="left", padx=4, pady=6)
 
         # Release delay
-        release_frame = ctk.CTkFrame(self.tab_misc)
+        release_frame = ctk.CTkFrame(self._accurate_frame)
         release_frame.pack(fill="x", padx=10, pady=(0, 4))
-
         ctk.CTkLabel(release_frame, text="Release Delay:",
-                      font=ctk.CTkFont(size=13), width=100,
+                      font=ctk.CTkFont(size=13), width=120,
                       anchor="w").pack(side="left", padx=(10, 4), pady=6)
-
         self._release_delay_var = ctk.IntVar(value=50)
         self._release_slider = ctk.CTkSlider(
             release_frame, from_=0, to=100,
@@ -842,21 +1161,16 @@ class NetBlockerApp:
             command=lambda v: self._on_spammer_slider("release", v),
         )
         self._release_slider.pack(side="left", padx=4, pady=6)
-
         self._release_delay_label = ctk.CTkLabel(
-            release_frame, text="50 ms",
-            font=ctk.CTkFont(size=13), width=60,
-        )
+            release_frame, text="50 ms", font=ctk.CTkFont(size=13), width=60)
         self._release_delay_label.pack(side="left", padx=4, pady=6)
 
-        # Hold delay before activation
-        hold_frame = ctk.CTkFrame(self.tab_misc)
-        hold_frame.pack(fill="x", padx=10, pady=(0, 6))
-
+        # Activation delay
+        hold_frame = ctk.CTkFrame(self._accurate_frame)
+        hold_frame.pack(fill="x", padx=10, pady=(0, 4))
         ctk.CTkLabel(hold_frame, text="Activation Delay:",
                       font=ctk.CTkFont(size=13), width=120,
                       anchor="w").pack(side="left", padx=(10, 4), pady=6)
-
         self._hold_delay_var = ctk.IntVar(value=0)
         self._hold_slider = ctk.CTkSlider(
             hold_frame, from_=0, to=2000,
@@ -864,19 +1178,77 @@ class NetBlockerApp:
             command=lambda v: self._on_spammer_slider("hold", v),
         )
         self._hold_slider.pack(side="left", padx=4, pady=6)
-
         self._hold_delay_label = ctk.CTkLabel(
-            hold_frame, text="0 ms",
-            font=ctk.CTkFont(size=13), width=60,
-        )
+            hold_frame, text="0 ms", font=ctk.CTkFont(size=13), width=60)
         self._hold_delay_label.pack(side="left", padx=4, pady=6)
 
+        # --- Random mode frame ---
+        self._random_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        # Hidden by default (not packed)
+
+        def _rand_row(parent, label_text, min_val, max_val, min_default, max_default, key_prefix):
+            frame = ctk.CTkFrame(parent)
+            frame.pack(fill="x", padx=10, pady=(0, 4))
+            ctk.CTkLabel(frame, text=label_text,
+                          font=ctk.CTkFont(size=13), width=120,
+                          anchor="w").pack(side="left", padx=(10, 4), pady=6)
+            ctk.CTkLabel(frame, text="Min:", font=ctk.CTkFont(size=12)).pack(side="left", padx=(4, 2), pady=6)
+            min_var = ctk.IntVar(value=min_default)
+            min_slider = ctk.CTkSlider(frame, from_=min_val, to=max_val, variable=min_var, width=100,
+                                        command=lambda v, k=key_prefix: self._on_rand_slider(k, "min", v))
+            min_slider.pack(side="left", padx=2, pady=6)
+            min_lbl = ctk.CTkLabel(frame, text=str(min_default), font=ctk.CTkFont(size=12), width=40)
+            min_lbl.pack(side="left", padx=2, pady=6)
+            ctk.CTkLabel(frame, text="Max:", font=ctk.CTkFont(size=12)).pack(side="left", padx=(6, 2), pady=6)
+            max_var_tk = ctk.IntVar(value=max_default)
+            max_slider = ctk.CTkSlider(frame, from_=min_val, to=max_val, variable=max_var_tk, width=100,
+                                        command=lambda v, k=key_prefix: self._on_rand_slider(k, "max", v))
+            max_slider.pack(side="left", padx=2, pady=6)
+            max_lbl = ctk.CTkLabel(frame, text=str(max_default), font=ctk.CTkFont(size=12), width=40)
+            max_lbl.pack(side="left", padx=2, pady=6)
+            return min_var, min_slider, min_lbl, max_var_tk, max_slider, max_lbl
+
+        (self._rp_min_var, self._rp_min_slider, self._rp_min_lbl,
+         self._rp_max_var, self._rp_max_slider, self._rp_max_lbl) = _rand_row(
+            self._random_frame, "Press Delay:", 0, 100, 10, 80, "press")
+
+        (self._rr_min_var, self._rr_min_slider, self._rr_min_lbl,
+         self._rr_max_var, self._rr_max_slider, self._rr_max_lbl) = _rand_row(
+            self._random_frame, "Release Delay:", 0, 100, 10, 80, "release")
+
+        (self._rh_min_var, self._rh_min_slider, self._rh_min_lbl,
+         self._rh_max_var, self._rh_max_slider, self._rh_max_lbl) = _rand_row(
+            self._random_frame, "Activation Delay:", 0, 2000, 0, 500, "hold")
+
         # Hint
-        ctk.CTkLabel(self.tab_misc,
+        ctk.CTkLabel(scroll,
                       text="Hold spacebar to spam. Physical press is intercepted, synthetic presses are sent.",
                       text_color="gray",
                       font=ctk.CTkFont(size=12), wraplength=500,
                       justify="left").pack(anchor="w", padx=10, pady=(8, 0))
+
+    def _on_spammer_mode_change(self, value):
+        self.spammer.randomize = (value == "Random")
+        if value == "Accurate":
+            self._random_frame.pack_forget()
+            self._accurate_frame.pack(fill="x", padx=0, pady=0)
+        else:
+            self._accurate_frame.pack_forget()
+            self._random_frame.pack(fill="x", padx=0, pady=0)
+
+    def _on_rand_slider(self, key_prefix, which, value):
+        v = int(value)
+        attr = f"{key_prefix}_{which}_ms"
+        setattr(self.spammer, attr, v)
+        # Update label
+        lbl_map = {
+            ("press", "min"): self._rp_min_lbl, ("press", "max"): self._rp_max_lbl,
+            ("release", "min"): self._rr_min_lbl, ("release", "max"): self._rr_max_lbl,
+            ("hold", "min"): self._rh_min_lbl, ("hold", "max"): self._rh_max_lbl,
+        }
+        lbl = lbl_map.get((key_prefix, which))
+        if lbl:
+            lbl.configure(text=str(v))
 
     def _on_spammer_slider(self, which, value):
         v = int(value)
@@ -1049,10 +1421,18 @@ class NetBlockerApp:
             "auto_refresh_enabled": self._auto_refresh_enabled.get(),
             "auto_refresh_ms": self._auto_refresh_ms.get(),
             "overlay_visible": self.overlay.visible,
+            "overlay_settings": self.overlay.settings,
             "spammer_enabled": self._spammer_enabled.get(),
+            "spammer_mode": self._spammer_mode.get(),
             "spammer_press_ms": self._press_delay_var.get(),
             "spammer_release_ms": self._release_delay_var.get(),
             "spammer_hold_ms": self._hold_delay_var.get(),
+            "spammer_rand_press_min": self._rp_min_var.get(),
+            "spammer_rand_press_max": self._rp_max_var.get(),
+            "spammer_rand_release_min": self._rr_min_var.get(),
+            "spammer_rand_release_max": self._rr_max_var.get(),
+            "spammer_rand_hold_min": self._rh_min_var.get(),
+            "spammer_rand_hold_max": self._rh_max_var.get(),
         }
 
     def _save_config(self):
@@ -1089,7 +1469,38 @@ class NetBlockerApp:
         self._refresh_slider.set(ar_ms)
         self._refresh_ms_label.configure(text=f"{ar_ms} ms")
 
-        # Overlay
+        # Overlay settings
+        ov_settings = data.get("overlay_settings")
+        if ov_settings:
+            self.overlay.apply_all_settings(ov_settings)
+            # Sync UI controls
+            self._ov_label_size.set(ov_settings.get("label_size", 18))
+            self._ov_label_size_lbl.configure(text=str(ov_settings.get("label_size", 18)))
+            self._ov_timer_size.set(ov_settings.get("timer_size", 14))
+            self._ov_timer_size_lbl.configure(text=str(ov_settings.get("timer_size", 14)))
+            self._ov_opacity.set(ov_settings.get("opacity", 85))
+            self._ov_opacity_lbl.configure(text=f"{ov_settings.get('opacity', 85)}%")
+            self._ov_width.set(ov_settings.get("width", 200))
+            self._ov_width_lbl.configure(text=str(ov_settings.get("width", 200)))
+            self._ov_height.set(ov_settings.get("height", 70))
+            self._ov_height_lbl.configure(text=str(ov_settings.get("height", 70)))
+            self._ov_pos_x.set(ov_settings.get("pos_x", 20))
+            self._ov_pos_x_lbl.configure(text=str(ov_settings.get("pos_x", 20)))
+            self._ov_pos_y.set(ov_settings.get("pos_y", 20))
+            self._ov_pos_y_lbl.configure(text=str(ov_settings.get("pos_y", 20)))
+            for key, entry in self._ov_color_entries.items():
+                if key in ov_settings:
+                    entry.delete(0, "end")
+                    entry.insert(0, ov_settings[key])
+                    row = entry.master
+                    for child in row.winfo_children():
+                        if isinstance(child, ctk.CTkLabel) and child.cget("width") == 24:
+                            try:
+                                child.configure(fg_color=ov_settings[key])
+                            except Exception:
+                                pass
+
+        # Overlay visibility
         if data.get("overlay_visible", False):
             if not self.overlay.visible:
                 self.overlay.show()
@@ -1126,6 +1537,27 @@ class NetBlockerApp:
         self._hold_slider.set(hold_ms)
         self._hold_delay_label.configure(text=f"{hold_ms} ms")
         self.spammer._hold_delay_ms = hold_ms
+
+        # Spammer mode
+        sp_mode = data.get("spammer_mode", "Accurate")
+        self._spammer_mode.set(sp_mode)
+        self._on_spammer_mode_change(sp_mode)
+
+        # Random settings
+        rand_vals = {
+            "press_min": ("_rp_min_var", "_rp_min_slider", "_rp_min_lbl", "press_min_ms", 10),
+            "press_max": ("_rp_max_var", "_rp_max_slider", "_rp_max_lbl", "press_max_ms", 80),
+            "release_min": ("_rr_min_var", "_rr_min_slider", "_rr_min_lbl", "release_min_ms", 10),
+            "release_max": ("_rr_max_var", "_rr_max_slider", "_rr_max_lbl", "release_max_ms", 80),
+            "hold_min": ("_rh_min_var", "_rh_min_slider", "_rh_min_lbl", "hold_min_ms", 0),
+            "hold_max": ("_rh_max_var", "_rh_max_slider", "_rh_max_lbl", "hold_max_ms", 500),
+        }
+        for cfg_suffix, (var_name, slider_name, lbl_name, spammer_attr, default) in rand_vals.items():
+            val = data.get(f"spammer_rand_{cfg_suffix}", default)
+            getattr(self, var_name).set(val)
+            getattr(self, slider_name).set(val)
+            getattr(self, lbl_name).configure(text=str(val))
+            setattr(self.spammer, spammer_attr, val)
 
     def _load_config(self, name: str):
         data = load_config(name)
