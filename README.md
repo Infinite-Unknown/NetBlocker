@@ -5,6 +5,11 @@ A Windows utility that selectively blocks internet access for chosen application
 Created by **Infinite** — [GitHub](https://github.com/Infinite-Unknown)
 
 ---
+## What can it do?
+Showcase:
+
+[![Roblox Blox Strike Lag Exploit](https://img.youtube.com/vi/YEQ_8O-11bo/0.jpg)](https://www.youtube.com/watch?v=YEQ_8O-11bo)
+
 
 ## Features
 
@@ -47,8 +52,8 @@ pythonw net_blocker.pyw
 A build script is included that uses a conda environment for a clean build:
 
 ```bash
-# From the NetBlocker folder, run:
-build.bat
+# From the NetBlocker folder, (after conda activated) run:
+.\build.bat
 ```
 
 This will:
