@@ -14,11 +14,11 @@ Showcase:
 ## Features
 
 - **Selective App Blocking** — Pick one or multiple running processes and block their outbound internet via Windows Firewall rules.
-- **Hold or Toggle Mode** — Hold a key to block while pressed, or toggle on/off with a single press.
+- **Hold, Toggle, Charge, or Tap Charge Mode** — Multiple ways to trigger the lagswitch.
 - **Hotkey Binding** — Bind any keyboard key or mouse button (including Mouse 4/5) as the activation hotkey.
-- **Auto Refresh** — Automatically cycles block off/on at a configurable interval (1–999 ms) to prevent server-side disconnect detection.
-- **Always-on-Top Overlay** — Draggable overlay showing "Lagswitch: On/Off" status with a live millisecond timer.
-- **Spacebar Spammer** — Low-level keyboard hook intercepts physical spacebar, sends rapid synthetic press/release events with configurable delays. Works with DirectInput games (e.g. Roblox).
+- **Auto Refresh & Charge Delay** — Automatically cycles block off/on at a configurable interval, or specify a post-lag cooldown period.
+- **Always-on-Top Overlays** — Draggable overlays showing "Lagswitch" and "Auto Bhop" statuses with timers. Fully customizable (colors, opacity, size).
+- **Spacebar Spammer (Auto Bhop)** — Intercepts physical spacebar to send rapid synthetic presses with accurate or randomized delays. Works with DirectInput games.
 - **Config Profiles** — Save/load named configurations including selected apps, hotkey, mode, overlay state, and spammer settings.
 
 ## Requirements
@@ -81,16 +81,19 @@ pyinstaller --noconfirm --onefile --windowed --name "NetBlocker" --uac-admin \
 ## Usage
 
 1. Launch `NetBlocker.exe` (or `pythonw net_blocker.pyw`) — it will request admin privileges.
-2. **Blocker tab**: Select apps from the process list, set your hotkey, choose Hold or Toggle mode.
+2. **Blocker tab**: Select apps from the process list, set your hotkey, choose mode, and tweak Auto Refresh or Charge delays.
 3. **Configs tab**: Save your setup with a name. The first saved config auto-loads on startup.
-4. **Misc tab**: Enable the spacebar spammer and tune press/release/activation delays.
+4. **Overlay tab**: Customize the appearance (size, colors, opacity) of both the Lag and Spammer overlays.
+5. **Misc tab**: Enable the Auto Bhop (spacebar spammer) and tune accurate or randomized press/release delays.
 
 ### Hotkey Modes
 
-| Mode   | Behavior |
-|--------|----------|
-| Hold   | Internet is blocked only while the hotkey is held down. |
-| Toggle | Press once to block, press again to unblock. |
+| Mode         | Behavior |
+|--------------|----------|
+| Hold         | Internet is blocked only while the hotkey is held down. |
+| Toggle       | Press once to block, press again to unblock. |
+| Charge       | Hold to block; automatically unblocks after the Auto Refresh timer fires. |
+| Tap Charge   | Tap to start blocking; tap again or wait for timer to stop. |
 
 ### Auto Refresh
 

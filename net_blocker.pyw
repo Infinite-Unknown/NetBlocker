@@ -1,6 +1,6 @@
 # ============================================================================
 #  Net Blocker — Selective app internet blocker with lagswitch & spacebar spam
-#  Copyright (c) 2025 Infinite
+#  Copyright (c) 2026 Infinite
 #  GitHub: https://github.com/Infinite-Unknown
 #  License: MIT
 # ============================================================================
