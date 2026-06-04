@@ -1,0 +1,56 @@
+# XcodeGen project spec for the macOS NetBlocker.
+# Generate the .xcodeproj with:  brew install xcodegen && cd mac && xcodegen generate
+#
+# Two targets:
+#   - NetBlocker        : the SwiftUI app (UI, hotkey listener, filter lifecycle)
+#   - FilterExtension   : the Network Extension content filter (per-app drop logic)
+# The Shared/ sources are compiled into BOTH targets.
+
+name: NetBlocker
+options:
+  bundleIdPrefix: com.infiniteunknown
+  deploymentTarget:
+    macOS: "12.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Set these to your Apple Developer team for signing.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  NetBlocker:
+    type: application
+    platform: macOS
+    sources:
+      - path: NetBlocker
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.infiniteunknown.netblocker
+        INFOPLIST_FILE: NetBlocker/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: NetBlocker/Resources/NetBlocker.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - target: FilterExtension
+        embed: true   # embed the system extension inside the app's Contents/Library/SystemExtensions
+    frameworks:
+      - NetworkExtension
+      - SystemExtensions
+
+  FilterExtension:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: FilterExtension
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.infiniteunknown.netblocker.FilterExtension
+        INFOPLIST_FILE: FilterExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FilterExtension/FilterExtension.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    frameworks:
+      - NetworkExtension

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow this app to install the bundled content-filter system extension. -->
+    <key>com.apple.developer.system-extension.install</key>
+    <true/>
+
+    <!-- Shared container for app <-> extension state (block flag, target list). -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.infiniteunknown.netblocker</string>
+    </array>
+
+    <!-- App Sandbox: required for distribution; keep network client + user-selected files. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

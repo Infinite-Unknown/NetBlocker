@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>NetBlocker</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <!-- Shown when requesting Input Monitoring for the global hotkey listener. -->
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>NetBlocker needs to detect your chosen hotkey system-wide to toggle the lag switch.</string>
+</dict>
+</plist>

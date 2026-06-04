@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Network Extension capability: this extension is a content filter provider.
+         Requires the matching entitlement to be enabled on your Apple Developer
+         account / App ID (request access from Apple if not yet granted). -->
+    <key>com.apple.developer.networking.networkextension</key>
+    <array>
+        <string>content-filter-provider</string>
+    </array>
+
+    <!-- Same App Group as the host app to share state. -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.infiniteunknown.netblocker</string>
+    </array>
+
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>
